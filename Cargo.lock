@@ -1008,7 +1008,8 @@ name = "monkeybagel"
 version = "0.1.0"
 dependencies = [
  "clap",
- "pgp 0.11.0",
+ "hex",
+ "pgp",
  "rpgpie",
  "rpgpie-cert-store",
 ]
@@ -1182,62 +1183,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88b39c9bfcfc231068454382784bb460aae594343fb030d46e9f50a645418412"
 dependencies = [
  "base64ct",
-]
-
-[[package]]
-name = "pgp"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "031fa1e28c4cb54c90502ef0642a44ef10ec8349349ebe6372089f1b1ef4f297"
-dependencies = [
- "aes",
- "base64",
- "bitfield",
- "block-padding",
- "blowfish",
- "bstr",
- "buffer-redux",
- "byteorder",
- "camellia",
- "cast5",
- "cfb-mode",
- "chrono",
- "cipher",
- "const-oid",
- "crc24",
- "curve25519-dalek",
- "derive_builder",
- "des",
- "digest",
- "dsa",
- "ed25519-dalek",
- "elliptic-curve",
- "flate2",
- "generic-array 0.14.7",
- "hex",
- "idea",
- "iter-read",
- "k256",
- "log",
- "md-5",
- "nom",
- "num-bigint-dig",
- "num-traits",
- "num_enum",
- "p256",
- "p384",
- "rand",
- "ripemd",
- "rsa",
- "sha1",
- "sha2",
- "sha3",
- "signature",
- "smallvec",
- "thiserror",
- "twofish",
- "x25519-dalek",
- "zeroize",
 ]
 
 [[package]]
@@ -1456,7 +1401,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "log",
- "pgp 0.12.0-alpha.1",
+ "pgp",
  "rand",
  "rand_core",
 ]
