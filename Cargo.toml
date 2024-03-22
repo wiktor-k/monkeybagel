@@ -11,3 +11,7 @@ hex = "0.4.3"
 pgp = "0.12.0-alpha.1"
 rpgpie = { path = "../rpgpie" }
 rpgpie-cert-store = { path = "../rpgpie-cert-store" }
+
+[dev-dependencies]
+rstest = "0.18.2"
+testresult = "0.4.0"
