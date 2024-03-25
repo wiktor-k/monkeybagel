@@ -1,10 +1,15 @@
-use pgp::types::KeyTrait;
-use rpgpie::key::{checked::CheckedCertificate, component::SignedComponentKeyPub};
-use rpgpie_cert_store::Store;
 use std::{io::Read, io::Write, path::PathBuf};
 
+use card_backend_pcsc::PcscBackend;
 use clap::Parser;
-
+use openpgp_card::KeyType;
+use openpgp_card_rpgp::CardSlot;
+use pgp::crypto::hash::HashAlgorithm;
+use pgp::packet::{self, SignatureConfig};
+use pgp::types::KeyTrait;
+use pgp::StandaloneSignature;
+use rpgpie::key::{checked::CheckedCertificate, component::SignedComponentKeyPub};
+use rpgpie_cert_store::Store;
 #[derive(Parser, Debug, Default)]
 pub struct Args {
     #[clap(long)]
@@ -139,7 +144,60 @@ pub fn run(
                 true
             }
         }
-        Mode::Sign(key) => false,
+        Mode::Sign(_key) => {
+            // -- set up card signer
+            let card = PcscBackend::cards(None)?.next().unwrap()?;
+            let mut card = openpgp_card::Card::new(card)?;
+            let mut tx = card.transaction()?;
+
+            let ard = tx.application_related_data()?;
+            let ident = ard.application_id()?.ident();
+            if let Ok(Some(pin)) = openpgp_card_state::get_pin(&ident) {
+                if tx.verify_pw1_sign(pin.as_bytes()).is_err() {
+                    // We drop the PIN from the state backend, to avoid exhausting
+                    // the retry counter and locking up the User PIN.
+                    let res = openpgp_card_state::drop_pin(&ident);
+
+                    if res.is_ok() {
+                        writeln!(stderr,
+                                            "ERROR: The stored User PIN for OpenPGP card '{}' seems wrong or blocked! Dropped it from storage.",
+                                            &ident)?;
+                    } else {
+                        writeln!(stderr,
+                                            "ERROR: The stored User PIN for OpenPGP card '{}' seems wrong or blocked! In addition, dropping it from storage failed.",
+                                            &ident)?;
+                    }
+                }
+            } else {
+                return Err(std::io::Error::other("No signing PIN configured.").into());
+            }
+
+            let cs = CardSlot::init_from_card(tx, KeyType::Signing)?;
+
+            // -- use card signer
+            let signature = SignatureConfig::new_v4(
+                packet::SignatureVersion::V4,
+                packet::SignatureType::Binary,
+                cs.public_key().algorithm(),
+                HashAlgorithm::SHA2_256,
+                vec![
+                    packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
+                        std::time::SystemTime::now().into(),
+                    )),
+                    packet::Subpacket::regular(packet::SubpacketData::Issuer(cs.key_id())),
+                ],
+                vec![],
+            );
+
+            let mut buffer = vec![];
+            std::io::copy(&mut stdin, &mut buffer)?;
+            let signature = signature.sign(&cs, String::new, &buffer[..])?;
+
+            let signature = StandaloneSignature { signature };
+            signature.to_armored_writer(&mut stdout, None)?;
+
+            true
+        }
     } {
         mode.write_success_trailer(stdout, stderr)?;
         Ok(())
