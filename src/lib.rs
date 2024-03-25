@@ -90,6 +90,9 @@ pub fn run(
             let mut buffer = vec![];
             std::io::copy(&mut stdin, &mut buffer)?;
             let sig = &rpgpie::sig::load(&mut std::fs::File::open(signature)?)?[0];
+            //capture sigs:
+            //std::fs::copy(signature, "/tmp/data.sig")?;
+            //std::fs::File::create_new("/tmp/data")?.write_all(&buffer)?;
             let valid_sigs = sig
                 .config
                 .issuer_fingerprint()
