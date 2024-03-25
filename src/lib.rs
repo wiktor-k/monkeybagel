@@ -10,6 +10,7 @@ use pgp::types::KeyTrait;
 use pgp::StandaloneSignature;
 use rpgpie::key::{checked::CheckedCertificate, component::SignedComponentKeyPub};
 use rpgpie_cert_store::Store;
+
 #[derive(Parser, Debug, Default)]
 pub struct Args {
     #[clap(long)]
