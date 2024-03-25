@@ -65,12 +65,13 @@ impl Mode {
         mut stdout: impl Write,
         mut stderr: impl Write,
     ) -> std::io::Result<()> {
-        Ok(match *self {
+        match *self {
             // https://github.com/git/git/blob/11c821f2f2a31e70fb5cc449f9a29401c333aad2/gpg-interface.c#L371
             Mode::Verify(_) => writeln!(stdout, "\n[GNUPG:] GOODSIG ")?,
             // https://github.com/git/git/blob/11c821f2f2a31e70fb5cc449f9a29401c333aad2/gpg-interface.c#L994
             Mode::Sign(_) => writeln!(stderr, "\n[GNUPG:] SIG_CREATED ")?,
-        })
+        }
+        Ok(())
     }
 }
 
@@ -92,7 +93,7 @@ pub fn run(
                 .config
                 .issuer_fingerprint()
                 .iter()
-                .map(|fpr| hex::encode(fpr))
+                .map(hex::encode)
                 .map(|fpr| store.search_by_fingerprint(&fpr).ok())
                 .flat_map(|certs| {
                     certs
