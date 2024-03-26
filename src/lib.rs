@@ -200,7 +200,7 @@ pub fn run(
                     packet::Subpacket::regular(packet::SubpacketData::Issuer(cs.key_id())),
                     packet::Subpacket::regular(packet::SubpacketData::IssuerFingerprint(
                         KeyVersion::V4,
-                        cs.fingerprint().try_into()?,
+                        cs.fingerprint().into(),
                     )),
                 ],
                 vec![],
