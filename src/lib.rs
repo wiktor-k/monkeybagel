@@ -122,9 +122,12 @@ pub fn run(
                 })
                 .collect::<Vec<_>>();
             for (key, signing_key, _sig) in &valid_sigs {
+                if let Some(user_id) = key.primary_user_id() {
+                    writeln!(stderr, "Signed by: {}", user_id.id.id())?;
+                }
                 writeln!(
                     stderr,
-                    "Valid signature from certificate {}",
+                    "Certificate: {}",
                     if let SignedComponentKeyPub::Primary((primary, _)) = key.primary_key() {
                         hex::encode(primary.fingerprint())
                     } else {
@@ -133,17 +136,22 @@ pub fn run(
                 )?;
                 writeln!(
                     stderr,
-                    "Valid signature from certificate {}",
+                    "Signing key: {}",
                     hex::encode(signing_key.fingerprint())
                 )?;
-                if let Some(user_id) = key.primary_user_id() {
-                    writeln!(stderr, "Valid signature from: {}", user_id.id.id())?;
-                }
             }
             //eprintln!("VLD: {valid_sigs:?}");
 
             if valid_sigs.is_empty() {
-                writeln!(stderr, "No valid sigs")?;
+                writeln!(
+                    stderr,
+                    "No valid sigs for signing key {}",
+                    sig.config
+                        .issuer_fingerprint()
+                        .iter()
+                        .map(hex::encode)
+                        .fold(String::new(), |a, b| a + " " + &b)
+                )?;
                 false
             } else {
                 true
