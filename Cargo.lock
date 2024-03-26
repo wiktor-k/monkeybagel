@@ -2262,7 +2262,9 @@ dependencies = [
 
 [[package]]
 name = "rpgpie"
-version = "0.0.2"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "945ddd9d6d345d7d3a43b79a2a3051efb0129fb6c813ebda73fd82be5dc7c750"
 dependencies = [
  "anyhow",
  "chrono",
