@@ -6,8 +6,8 @@ use openpgp_card::KeyType;
 use openpgp_card_rpgp::CardSlot;
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::packet::{self, SignatureConfig};
-use pgp::types::{KeyTrait, KeyVersion};
-use pgp::StandaloneSignature;
+use pgp::types::{KeyTrait, KeyVersion, SecretKeyTrait};
+use pgp::{Signature, StandaloneSignature};
 use rpgpie::key::{checked::CheckedCertificate, component::SignedComponentKeyPub};
 use rpgpie_cert_store::Store;
 
@@ -166,7 +166,6 @@ pub fn run(
             }
         }
         Mode::Sign(_key, armor) => {
-            // -- set up card signer
             let card = PcscBackend::cards(None)?
                 .next()
                 .expect("to find some cards")?;
@@ -216,9 +215,18 @@ pub fn run(
                 vec![],
             );
 
-            let mut buffer = vec![];
-            std::io::copy(&mut stdin, &mut buffer)?;
-            let signature = signature.sign(&cs, String::new, &buffer[..])?;
+            let mut hasher = HashAlgorithm::SHA2_256.new_hasher()?;
+
+            signature.hash_data_to_sign(&mut *hasher, stdin)?;
+            let len = signature.hash_signature_data(&mut *hasher)?;
+            hasher.update(&signature.trailer(len)?);
+
+            let hash = &hasher.finish()[..];
+
+            let signed_hash_value = [hash[0], hash[1]];
+            let raw_sig = cs.create_signature(String::new, HashAlgorithm::SHA2_256, hash)?;
+
+            let signature = Signature::from_config(signature, signed_hash_value, raw_sig);
 
             match armor {
                 Armor::Armor => {
