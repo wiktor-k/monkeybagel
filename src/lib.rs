@@ -44,7 +44,7 @@ enum Armor {
 
 enum Mode {
     Verify(PathBuf),
-    Sign(String, Armor),
+    Sign(Option<String>, Armor),
 }
 
 impl TryFrom<Args> for Mode {
@@ -53,19 +53,15 @@ impl TryFrom<Args> for Mode {
     fn try_from(value: Args) -> Result<Self, Self::Error> {
         if let Some(signature) = value.verify {
             Ok(Mode::Verify(signature))
-        } else if value.detach_sign && value.sign && value.armor {
-            if let Some(user_id) = value.user_id {
-                Ok(Mode::Sign(
-                    user_id,
-                    if value.armor {
-                        Armor::Armor
-                    } else {
-                        Armor::NoArmor
-                    },
-                ))
-            } else {
-                Err("Missing user-id value".into())
-            }
+        } else if value.detach_sign && value.sign {
+            Ok(Mode::Sign(
+                value.user_id,
+                if value.armor {
+                    Armor::Armor
+                } else {
+                    Armor::NoArmor
+                },
+            ))
         } else {
             Err("Unknown mode: only verify and binary, armored sign are supported.".into())
         }
@@ -82,7 +78,7 @@ impl Mode {
             // https://github.com/git/git/blob/11c821f2f2a31e70fb5cc449f9a29401c333aad2/gpg-interface.c#L371
             Mode::Verify(_) => writeln!(stdout, "\n[GNUPG:] GOODSIG ")?,
             // https://github.com/git/git/blob/11c821f2f2a31e70fb5cc449f9a29401c333aad2/gpg-interface.c#L994
-            Mode::Sign(_) => writeln!(stderr, "\n[GNUPG:] SIG_CREATED ")?,
+            Mode::Sign(_, _) => writeln!(stderr, "\n[GNUPG:] SIG_CREATED ")?,
         }
         Ok(())
     }
@@ -171,7 +167,9 @@ pub fn run(
         }
         Mode::Sign(_key, armor) => {
             // -- set up card signer
-            let card = PcscBackend::cards(None)?.next().unwrap()?;
+            let card = PcscBackend::cards(None)?
+                .next()
+                .expect("to find some cards")?;
             let mut card = openpgp_card::Card::new(card)?;
             let mut tx = card.transaction()?;
 
