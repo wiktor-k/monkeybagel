@@ -26,11 +26,14 @@ jobs:
       matrix:
         include:
         - os: ubuntu-latest
+          install-libs: true
         - os: macos-latest
         - os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - if: ${{ matrix.install-libs }}
+        run: apt-get install -y pcscd libpcsclite-dev
       - name: Check formatting
         run: cargo fmt --all -- --check
 
