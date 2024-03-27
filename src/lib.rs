@@ -196,11 +196,10 @@ pub fn run(
 
             let cs = CardSlot::init_from_card(tx, KeyType::Signing)?;
 
-            // -- use card signer
             let signature = SignatureConfig::new_v4(
                 packet::SignatureVersion::V4,
                 packet::SignatureType::Binary,
-                cs.public_key().algorithm(),
+                cs.algorithm(),
                 HashAlgorithm::SHA2_256,
                 vec![
                     packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
