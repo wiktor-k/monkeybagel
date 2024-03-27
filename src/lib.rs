@@ -37,9 +37,14 @@ pub struct Args {
     pub file_to_verify: Option<String>,
 }
 
+enum Armor {
+    NoArmor,
+    Armor,
+}
+
 enum Mode {
     Verify(PathBuf),
-    Sign(String),
+    Sign(String, Armor),
 }
 
 impl TryFrom<Args> for Mode {
@@ -50,7 +55,14 @@ impl TryFrom<Args> for Mode {
             Ok(Mode::Verify(signature))
         } else if value.detach_sign && value.sign && value.armor {
             if let Some(user_id) = value.user_id {
-                Ok(Mode::Sign(user_id))
+                Ok(Mode::Sign(
+                    user_id,
+                    if value.armor {
+                        Armor::Armor
+                    } else {
+                        Armor::NoArmor
+                    },
+                ))
             } else {
                 Err("Missing user-id value".into())
             }
@@ -157,7 +169,7 @@ pub fn run(
                 true
             }
         }
-        Mode::Sign(_key) => {
+        Mode::Sign(_key, armor) => {
             // -- set up card signer
             let card = PcscBackend::cards(None)?.next().unwrap()?;
             let mut card = openpgp_card::Card::new(card)?;
@@ -210,8 +222,12 @@ pub fn run(
             std::io::copy(&mut stdin, &mut buffer)?;
             let signature = signature.sign(&cs, String::new, &buffer[..])?;
 
-            let signature = StandaloneSignature { signature };
-            signature.to_armored_writer(&mut stdout, None)?;
+            match armor {
+                Armor::Armor => {
+                    StandaloneSignature { signature }.to_armored_writer(&mut stdout, None)?
+                }
+                Armor::NoArmor => pgp::packet::write_packet(&mut stdout, &signature)?,
+            }
 
             true
         }
