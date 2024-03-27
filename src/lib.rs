@@ -17,7 +17,7 @@ pub struct Args {
     pub verify: Option<PathBuf>,
 
     #[clap(long, short = 'b')]
-    pub binary: bool,
+    pub detach_sign: bool,
 
     #[clap(long, short = 's')]
     pub sign: bool,
@@ -48,7 +48,7 @@ impl TryFrom<Args> for Mode {
     fn try_from(value: Args) -> Result<Self, Self::Error> {
         if let Some(signature) = value.verify {
             Ok(Mode::Verify(signature))
-        } else if value.binary && value.sign && value.armor {
+        } else if value.detach_sign && value.sign && value.armor {
             if let Some(user_id) = value.user_id {
                 Ok(Mode::Sign(user_id))
             } else {
