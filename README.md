@@ -17,7 +17,7 @@ Signing requires that the PIN has been stored using [`openpgp-card-state`][OCS]
 ### Basic detached signing
 
 ```sh
-cargo run -- -bs < Cargo.toml > Cargo.toml.sig
+cargo run -- --detach-sign < Cargo.toml > Cargo.toml.sig
 ```
 
 ## Verification

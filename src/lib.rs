@@ -53,7 +53,7 @@ impl TryFrom<Args> for Mode {
     fn try_from(value: Args) -> Result<Self, Self::Error> {
         if let Some(signature) = value.verify {
             Ok(Mode::Verify(signature))
-        } else if value.detach_sign && value.sign {
+        } else if value.detach_sign {
             Ok(Mode::Sign(
                 value.user_id,
                 if value.armor {
@@ -62,8 +62,10 @@ impl TryFrom<Args> for Mode {
                     Armor::NoArmor
                 },
             ))
+        } else if value.sign {
+            Err("Inline sign is not supported. Use --detach-sign".into())
         } else {
-            Err("Unknown mode: only verify and binary, armored sign are supported.".into())
+            Err("Unknown mode: only verify and detach-sign operations are supported.".into())
         }
     }
 }
