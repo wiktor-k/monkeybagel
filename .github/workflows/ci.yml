@@ -48,6 +48,8 @@ jobs:
         - os: windows-latest
           install-libs: "vcpkg install sqlite3:x64-windows"
     runs-on: ${{ matrix.os }}
+    env:
+      VCPKGRS_DYNAMIC: "1"
     steps:
       - uses: actions/checkout@v4
       - if: ${{ matrix.install-libs }}
