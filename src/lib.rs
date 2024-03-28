@@ -35,6 +35,10 @@ pub struct Args {
     pub status_fd: Option<String>,
 
     pub file_to_verify: Option<String>,
+
+    /// Certificate store. By default uses user's shared PGP certificate directory.
+    #[clap(short, long, env = "PGP_CERT_D")]
+    pub cert_store: Option<PathBuf>,
 }
 
 enum Armor {
@@ -43,7 +47,10 @@ enum Armor {
 }
 
 enum Mode {
-    Verify(PathBuf),
+    Verify {
+        signature: PathBuf,
+        cert_store: Option<PathBuf>,
+    },
     Sign(Option<String>, Armor),
 }
 
@@ -52,7 +59,10 @@ impl TryFrom<Args> for Mode {
 
     fn try_from(value: Args) -> Result<Self, Self::Error> {
         if let Some(signature) = value.verify {
-            Ok(Mode::Verify(signature))
+            Ok(Mode::Verify {
+                signature,
+                cert_store: value.cert_store,
+            })
         } else if value.detach_sign {
             Ok(Mode::Sign(
                 value.user_id,
@@ -78,7 +88,7 @@ impl Mode {
     ) -> std::io::Result<()> {
         match *self {
             // https://github.com/git/git/blob/11c821f2f2a31e70fb5cc449f9a29401c333aad2/gpg-interface.c#L371
-            Mode::Verify(_) => writeln!(stdout, "\n[GNUPG:] GOODSIG ")?,
+            Mode::Verify { .. } => writeln!(stdout, "\n[GNUPG:] GOODSIG ")?,
             // https://github.com/git/git/blob/11c821f2f2a31e70fb5cc449f9a29401c333aad2/gpg-interface.c#L994
             Mode::Sign(_, _) => writeln!(stderr, "\n[GNUPG:] SIG_CREATED ")?,
         }
@@ -95,8 +105,15 @@ pub fn run(
     let mode: Mode = args.try_into()?;
 
     if match &mode {
-        Mode::Verify(signature) => {
-            let store = Store::new()?;
+        Mode::Verify {
+            signature,
+            cert_store,
+        } => {
+            let store = if let Some(cert_store) = cert_store {
+                Store::with_base_dir(cert_store)?
+            } else {
+                Store::new()?
+            };
             let mut buffer = vec![];
             std::io::copy(&mut stdin, &mut buffer)?;
             let sig = &rpgpie::sig::load(&mut std::fs::File::open(signature)?)?[0];

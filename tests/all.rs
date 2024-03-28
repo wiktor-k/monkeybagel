@@ -5,14 +5,35 @@ use rstest::rstest;
 use testresult::TestResult;
 
 #[rstest]
-#[ignore]
 fn main(#[files("tests/test-cases/*")] path: PathBuf) -> TestResult {
     let data = std::fs::File::open(path.join("data.txt"))?;
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
+
+    let cert_store = testdir::testdir!();
+
+    let cert_d = openpgp_cert_d::CertD::with_base_dir(&cert_store)?;
+    for file in std::fs::read_dir(&path)? {
+        let path = file?.path();
+        if let Some(extension) = path.extension() {
+            if extension == "pgp" {
+                let fingerprint = path.file_stem().expect("file name");
+                cert_d.insert(
+                    &fingerprint.to_str().expect("utf-8 name"),
+                    std::fs::read(&path)?,
+                    false,
+                    |contents, _| Ok(openpgp_cert_d::MergeResult::Data(contents)),
+                )?;
+            }
+        }
+    }
+
+    drop(cert_d);
+
     run(
         Args {
             verify: Some(path.join("signature.asc")),
+            cert_store: Some(cert_store),
             ..Default::default()
         },
         data,
