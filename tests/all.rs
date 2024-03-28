@@ -17,14 +17,10 @@ fn main(#[files("tests/test-cases/*")] path: PathBuf) -> TestResult {
         let path = file?.path();
         if let Some(extension) = path.extension() {
             if extension == "pgp" {
-                let fingerprint = path.file_stem().expect("file name");
                 eprintln!("Inserting new certificate: {}", path.display());
-                cert_d.insert(
-                    &fingerprint.to_str().expect("utf-8 name"),
-                    std::fs::read(&path)?,
-                    false,
-                    |contents, _| Ok(openpgp_cert_d::MergeResult::Data(contents)),
-                )?;
+                cert_d.insert_data(&std::fs::read(&path)?, false, |contents, _| {
+                    Ok(openpgp_cert_d::MergeResult::DataRef(contents))
+                })?;
             }
         }
     }
