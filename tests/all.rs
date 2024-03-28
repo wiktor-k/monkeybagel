@@ -18,6 +18,7 @@ fn main(#[files("tests/test-cases/*")] path: PathBuf) -> TestResult {
         if let Some(extension) = path.extension() {
             if extension == "pgp" {
                 let fingerprint = path.file_stem().expect("file name");
+                eprintln!("Inserting new certificate: {}", path.display());
                 cert_d.insert(
                     &fingerprint.to_str().expect("utf-8 name"),
                     std::fs::read(&path)?,
