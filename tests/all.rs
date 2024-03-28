@@ -11,6 +11,7 @@ fn main(#[files("tests/test-cases/*")] path: PathBuf) -> TestResult {
     let mut stderr = Vec::new();
 
     let cert_store = testdir::testdir!();
+    eprintln!("Using {} as a CertD store", cert_store.display());
 
     let cert_d = openpgp_cert_d::CertD::with_base_dir(&cert_store)?;
     for file in std::fs::read_dir(&path)? {

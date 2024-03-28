@@ -132,6 +132,10 @@ pub fn run(
                         .flatten()
                         .flat_map(|cert| {
                             let key: CheckedCertificate = cert.into();
+                            let keys = key.valid_signing_capable_component_keys_at(
+                                &std::time::SystemTime::now().into(),
+                            );
+                            eprintln!("keys: {keys:#?}");
                             key.valid_signing_capable_component_keys_at(
                                 &std::time::SystemTime::now().into(),
                             )
