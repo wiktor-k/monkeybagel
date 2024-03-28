@@ -27,7 +27,7 @@ fn main(#[files("tests/test-cases/*")] path: PathBuf) -> TestResult {
 
     drop(cert_d);
 
-    run(
+    if let Err(e) = run(
         Args {
             verify: Some(path.join("signature.asc")),
             cert_store: Some(cert_store),
@@ -36,16 +36,22 @@ fn main(#[files("tests/test-cases/*")] path: PathBuf) -> TestResult {
         data,
         &mut stdout,
         &mut stderr,
-    )?;
-    assert_eq!(
-        String::from_utf8_lossy(&stdout),
-        std::fs::read_to_string(path.join("stdout"))?,
-        "stdouts must be equal"
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&stderr),
-        std::fs::read_to_string(path.join("stderr"))?,
-        "stderrs must be equal"
-    );
-    Ok(())
+    ) {
+        eprintln!("An error occurred: {}", e);
+        eprintln!("stderr: {}", String::from_utf8_lossy(&stderr));
+        println!("stdout: {}", String::from_utf8_lossy(&stdout));
+        Err(e.into())
+    } else {
+        assert_eq!(
+            String::from_utf8_lossy(&stdout),
+            std::fs::read_to_string(path.join("stdout"))?,
+            "stdouts must be equal"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            std::fs::read_to_string(path.join("stderr"))?,
+            "stderrs must be equal"
+        );
+        Ok(())
+    }
 }
