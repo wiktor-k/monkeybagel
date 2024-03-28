@@ -116,6 +116,7 @@ pub fn run(
             };
             let mut buffer = vec![];
             std::io::copy(&mut stdin, &mut buffer)?;
+            eprintln!("buffer: {buffer:?}");
             let sig = &rpgpie::sig::load(&mut std::fs::File::open(signature)?)?[0];
             //capture sigs:
             //std::fs::copy(signature, "/tmp/data.sig")?;
