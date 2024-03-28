@@ -141,10 +141,9 @@ pub fn run(
                             )
                             .iter()
                             .filter_map(|signing_key| {
-                                signing_key
-                                    .clone()
-                                    .verify(sig, &buffer)
-                                    .map(|_| (key.clone(), signing_key.clone(), sig.clone()))
+                                let v = signing_key.clone().verify(sig, &buffer);
+                                eprintln!("V: {:?}", v);
+                                v.map(|_| (key.clone(), signing_key.clone(), sig.clone()))
                                     .ok()
                             })
                             .collect::<Vec<_>>()
