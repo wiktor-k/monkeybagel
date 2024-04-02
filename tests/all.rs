@@ -6,7 +6,7 @@ use testresult::TestResult;
 
 #[rstest]
 fn main(#[files("tests/test-cases/*")] path: PathBuf) -> TestResult {
-    let data = std::fs::File::open(path.join("data.txt"))?;
+    let data = std::fs::File::open(path.join("data.bin"))?;
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
 
