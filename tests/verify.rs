@@ -30,6 +30,7 @@ fn main(#[files("tests/test-cases/*")] path: PathBuf) -> TestResult {
     if let Err(e) = run(
         Args {
             verify: Some(path.join("signature.asc")),
+            file_to_verify: Some("-".into()),
             cert_store: Some(cert_store),
             ..Default::default()
         },

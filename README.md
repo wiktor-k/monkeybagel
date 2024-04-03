@@ -17,9 +17,13 @@ Signing requires that the PIN has been stored using [`openpgp-card-state`][OCS]
 ### Basic detached signing
 
 ```sh
-cargo run -- --detach-sign < Cargo.toml > Cargo.toml.sig
+monkeybagel --detach-sign < Cargo.toml > Cargo.toml.sig
 ```
 
 ## Verification
 
-Verification automatically uses keys stored in CertD.
+Verification automatically uses keys stored in CertD:
+
+```sh
+monkeybagel --verify Cargo.toml.sig - < Cargo.toml
+```
