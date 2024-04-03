@@ -17,8 +17,12 @@ Signing requires that the PIN has been stored using [`openpgp-card-state`][OCS]
 ### Basic detached signing
 
 ```sh
-monkeybagel --detach-sign < Cargo.toml > Cargo.toml.sig
+monkeybagel -u SIGNING_KEY_FPR --detach-sign < Cargo.toml > Cargo.toml.sig
 ```
+
+The `SIGNING_KEY_FPR` parameter must be set to the fingerprint of the *signing* subkey (not the certificate) in a hex-encoded format with *no* spaces (`0x` prefix is optional and removed during comparisons).
+
+The fingerprint may be retrieved using `oct status` command.
 
 ## Verification
 

@@ -51,7 +51,7 @@ enum Mode {
         signature: PathBuf,
         cert_store: Option<PathBuf>,
     },
-    Sign(Option<String>, Armor),
+    Sign(String, Armor),
 }
 
 impl TryFrom<Args> for Mode {
@@ -68,14 +68,18 @@ impl TryFrom<Args> for Mode {
                 Err("Verification of other files than stdin is unsupported. Use -".into())
             }
         } else if value.detach_sign {
-            Ok(Mode::Sign(
-                value.user_id,
-                if value.armor {
-                    Armor::Armor
-                } else {
-                    Armor::NoArmor
-                },
-            ))
+            if let Some(user_id) = value.user_id {
+                Ok(Mode::Sign(
+                    user_id,
+                    if value.armor {
+                        Armor::Armor
+                    } else {
+                        Armor::NoArmor
+                    },
+                ))
+            } else {
+                Err("-u parameter is required. Please use hex-encoded signing subkey with no spaces".into())
+            }
         } else if value.sign {
             Err("Inline sign is not supported. Use --detach-sign".into())
         } else {
@@ -189,43 +193,56 @@ pub fn run(
             }
         }
         Mode::Sign(key, armor) => {
-            let signature = if let Some(file_name) =
-                key.as_ref().and_then(|s| s.strip_prefix("file::"))
-            {
+            let signature = if let Some(file_name) = key.strip_prefix("file::") {
                 let signer = SignedSecretKey::from_bytes(std::fs::File::open(file_name)?)?;
                 complete_signing(signer, stdin)?
             } else {
-                let card = PcscBackend::cards(None)?
-                    .next()
-                    .expect("to find some cards")?;
-                let mut card = openpgp_card::Card::new(card)?;
-                let mut tx = card.transaction()?;
+                let signing_key = if let Some(hex_fpr) = key.strip_prefix("0x") {
+                    hex::decode(hex_fpr)?
+                } else {
+                    hex::decode(key)?
+                };
+                let mut signature = None;
+                for card in PcscBackend::cards(None)? {
+                    let card = card?;
+                    let mut card = openpgp_card::Card::new(card)?;
+                    let mut tx = card.transaction()?;
+                    let ard = tx.application_related_data()?;
+                    let fprs = ard.fingerprints()?;
+                    if let Some(fpr) = fprs.signature() {
+                        if fpr.as_bytes() == signing_key {
+                            let ident = ard.application_id()?.ident();
+                            if let Ok(Some(pin)) = openpgp_card_state::get_pin(&ident) {
+                                if tx.verify_pw1_sign(pin.as_bytes()).is_err() {
+                                    // We drop the PIN from the state backend, to avoid exhausting
+                                    // the retry counter and locking up the User PIN.
+                                    let res = openpgp_card_state::drop_pin(&ident);
 
-                let ard = tx.application_related_data()?;
-                let ident = ard.application_id()?.ident();
-                if let Ok(Some(pin)) = openpgp_card_state::get_pin(&ident) {
-                    if tx.verify_pw1_sign(pin.as_bytes()).is_err() {
-                        // We drop the PIN from the state backend, to avoid exhausting
-                        // the retry counter and locking up the User PIN.
-                        let res = openpgp_card_state::drop_pin(&ident);
-
-                        if res.is_ok() {
-                            writeln!(stderr,
+                                    if res.is_ok() {
+                                        writeln!(stderr,
                                             "ERROR: The stored User PIN for OpenPGP card '{}' seems wrong or blocked! Dropped it from storage.",
                                             &ident)?;
-                        } else {
-                            writeln!(stderr,
+                                    } else {
+                                        writeln!(stderr,
                                             "ERROR: The stored User PIN for OpenPGP card '{}' seems wrong or blocked! In addition, dropping it from storage failed.",
                                             &ident)?;
+                                    }
+                                }
+                            } else {
+                                return Err(
+                                    std::io::Error::other("No signing PIN configured.").into()
+                                );
+                            }
+
+                            let cs = CardSlot::init_from_card(tx, KeyType::Signing)?;
+
+                            signature = Some(complete_signing(cs, stdin)?);
+                            break;
                         }
                     }
-                } else {
-                    return Err(std::io::Error::other("No signing PIN configured.").into());
                 }
 
-                let cs = CardSlot::init_from_card(tx, KeyType::Signing)?;
-
-                complete_signing(cs, stdin)?
+                signature.expect("No cards attached provide signing for selected key.")
             };
             match armor {
                 Armor::Armor => {
