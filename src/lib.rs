@@ -59,10 +59,14 @@ impl TryFrom<Args> for Mode {
 
     fn try_from(value: Args) -> Result<Self, Self::Error> {
         if let Some(signature) = value.verify {
-            Ok(Mode::Verify {
-                signature,
-                cert_store: value.cert_store,
-            })
+            if Some("-".into()) == value.file_to_verify {
+                Ok(Mode::Verify {
+                    signature,
+                    cert_store: value.cert_store,
+                })
+            } else {
+                Err("Verification of other files than stdin is unsupported. Use -".into())
+            }
         } else if value.detach_sign {
             Ok(Mode::Sign(
                 value.user_id,
