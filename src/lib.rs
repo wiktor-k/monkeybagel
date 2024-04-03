@@ -7,7 +7,7 @@ use openpgp_card_rpgp::CardSlot;
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::packet::{self, SignatureConfig};
 use pgp::types::{KeyTrait, KeyVersion, SecretKeyTrait};
-use pgp::{Signature, StandaloneSignature};
+use pgp::{Deserializable, Signature, SignedSecretKey, StandaloneSignature};
 use rpgpie::key::{checked::CheckedCertificate, component::SignedComponentKeyPub};
 use rpgpie_cert_store::Store;
 
@@ -184,75 +184,51 @@ pub fn run(
                 true
             }
         }
-        Mode::Sign(_key, armor) => {
-            let card = PcscBackend::cards(None)?
-                .next()
-                .expect("to find some cards")?;
-            let mut card = openpgp_card::Card::new(card)?;
-            let mut tx = card.transaction()?;
+        Mode::Sign(key, armor) => {
+            let signature = if let Some(file_name) =
+                key.as_ref().map(|s| s.strip_prefix("file::")).flatten()
+            {
+                let signer = SignedSecretKey::from_bytes(std::fs::File::open(file_name)?)?;
+                complete_signing(signer, stdin)?
+            } else {
+                let card = PcscBackend::cards(None)?
+                    .next()
+                    .expect("to find some cards")?;
+                let mut card = openpgp_card::Card::new(card)?;
+                let mut tx = card.transaction()?;
 
-            let ard = tx.application_related_data()?;
-            let ident = ard.application_id()?.ident();
-            if let Ok(Some(pin)) = openpgp_card_state::get_pin(&ident) {
-                if tx.verify_pw1_sign(pin.as_bytes()).is_err() {
-                    // We drop the PIN from the state backend, to avoid exhausting
-                    // the retry counter and locking up the User PIN.
-                    let res = openpgp_card_state::drop_pin(&ident);
+                let ard = tx.application_related_data()?;
+                let ident = ard.application_id()?.ident();
+                if let Ok(Some(pin)) = openpgp_card_state::get_pin(&ident) {
+                    if tx.verify_pw1_sign(pin.as_bytes()).is_err() {
+                        // We drop the PIN from the state backend, to avoid exhausting
+                        // the retry counter and locking up the User PIN.
+                        let res = openpgp_card_state::drop_pin(&ident);
 
-                    if res.is_ok() {
-                        writeln!(stderr,
+                        if res.is_ok() {
+                            writeln!(stderr,
                                             "ERROR: The stored User PIN for OpenPGP card '{}' seems wrong or blocked! Dropped it from storage.",
                                             &ident)?;
-                    } else {
-                        writeln!(stderr,
+                        } else {
+                            writeln!(stderr,
                                             "ERROR: The stored User PIN for OpenPGP card '{}' seems wrong or blocked! In addition, dropping it from storage failed.",
                                             &ident)?;
+                        }
                     }
+                } else {
+                    return Err(std::io::Error::other("No signing PIN configured.").into());
                 }
-            } else {
-                return Err(std::io::Error::other("No signing PIN configured.").into());
-            }
 
-            let cs = CardSlot::init_from_card(tx, KeyType::Signing)?;
+                let cs = CardSlot::init_from_card(tx, KeyType::Signing)?;
 
-            let signature = SignatureConfig::new_v4(
-                packet::SignatureVersion::V4,
-                packet::SignatureType::Binary,
-                cs.algorithm(),
-                HashAlgorithm::SHA2_256,
-                vec![
-                    packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
-                        std::time::SystemTime::now().into(),
-                    )),
-                    packet::Subpacket::regular(packet::SubpacketData::Issuer(cs.key_id())),
-                    packet::Subpacket::regular(packet::SubpacketData::IssuerFingerprint(
-                        KeyVersion::V4,
-                        cs.fingerprint().into(),
-                    )),
-                ],
-                vec![],
-            );
-
-            let mut hasher = HashAlgorithm::SHA2_256.new_hasher()?;
-
-            signature.hash_data_to_sign(&mut *hasher, stdin)?;
-            let len = signature.hash_signature_data(&mut *hasher)?;
-            hasher.update(&signature.trailer(len)?);
-
-            let hash = &hasher.finish()[..];
-
-            let signed_hash_value = [hash[0], hash[1]];
-            let raw_sig = cs.create_signature(String::new, HashAlgorithm::SHA2_256, hash)?;
-
-            let signature = Signature::from_config(signature, signed_hash_value, raw_sig);
-
+                complete_signing(cs, stdin)?
+            };
             match armor {
                 Armor::Armor => {
                     StandaloneSignature { signature }.to_armored_writer(&mut stdout, None)?
                 }
                 Armor::NoArmor => pgp::packet::write_packet(&mut stdout, &signature)?,
             }
-
             true
         }
     } {
@@ -261,4 +237,42 @@ pub fn run(
     } else {
         Err(std::io::Error::other("processing error").into())
     }
+}
+
+fn complete_signing(
+    signer: impl SecretKeyTrait,
+    stdin: impl Read,
+) -> Result<Signature, Box<dyn std::error::Error>> {
+    let signature = SignatureConfig::new_v4(
+        packet::SignatureVersion::V4,
+        packet::SignatureType::Binary,
+        signer.algorithm(),
+        HashAlgorithm::SHA2_256,
+        vec![
+            packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
+                std::time::SystemTime::now().into(),
+            )),
+            packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())),
+            packet::Subpacket::regular(packet::SubpacketData::IssuerFingerprint(
+                KeyVersion::V4,
+                signer.fingerprint().into(),
+            )),
+        ],
+        vec![],
+    );
+
+    let mut hasher = HashAlgorithm::SHA2_256.new_hasher()?;
+
+    signature.hash_data_to_sign(&mut *hasher, stdin)?;
+    let len = signature.hash_signature_data(&mut *hasher)?;
+    hasher.update(&signature.trailer(len)?);
+
+    let hash = &hasher.finish()[..];
+
+    let signed_hash_value = [hash[0], hash[1]];
+    let raw_sig = signer.create_signature(String::new, HashAlgorithm::SHA2_256, hash)?;
+
+    let signature = Signature::from_config(signature, signed_hash_value, raw_sig);
+
+    Ok(signature)
 }
