@@ -190,7 +190,7 @@ pub fn run(
         }
         Mode::Sign(key, armor) => {
             let signature = if let Some(file_name) =
-                key.as_ref().map(|s| s.strip_prefix("file::")).flatten()
+                key.as_ref().and_then(|s| s.strip_prefix("file::"))
             {
                 let signer = SignedSecretKey::from_bytes(std::fs::File::open(file_name)?)?;
                 complete_signing(signer, stdin)?
