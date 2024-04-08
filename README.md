@@ -31,3 +31,5 @@ Verification automatically uses keys stored in CertD:
 ```sh
 monkeybagel --verify Cargo.toml.sig - < Cargo.toml
 ```
+
+If the key is not present in the local cache it is automatically downloaded from https://keys.openpgp.org/ (the query uses signing key fingerprint).

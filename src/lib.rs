@@ -4,6 +4,7 @@ use card_backend_pcsc::PcscBackend;
 use clap::Parser;
 use openpgp_card::KeyType;
 use openpgp_card_rpgp::CardSlot;
+use openpgp_cert_d::CertD;
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::packet::{self, SignatureConfig};
 use pgp::types::{KeyTrait, KeyVersion, SecretKeyTrait};
@@ -128,32 +129,53 @@ pub fn run(
             //capture sigs:
             //std::fs::copy(signature, "/tmp/data.sig")?;
             //std::fs::File::create_new("/tmp/data")?.write_all(&buffer)?;
-            let valid_sigs = sig
-                .config
-                .issuer_fingerprint()
+            let fingerprints = sig.config.issuer_fingerprint();
+            let fingerprints = fingerprints.iter().map(hex::encode).collect::<Vec<_>>();
+            let mut certs = fingerprints
                 .iter()
-                .map(hex::encode)
-                .map(|fpr| store.search_by_fingerprint(&fpr).ok())
-                .flat_map(|certs| {
-                    certs
-                        .iter()
-                        .flatten()
-                        .flat_map(|cert| {
-                            let key: CheckedCertificate = cert.into();
-                            key.valid_signing_capable_component_keys_at(
-                                &std::time::SystemTime::now().into(),
-                            )
-                            .iter()
-                            .filter_map(|signing_key| {
-                                signing_key
-                                    .clone()
-                                    .verify(sig, &buffer)
-                                    .map(|_| (key.clone(), signing_key.clone(), sig.clone()))
-                                    .ok()
-                            })
-                            .collect::<Vec<_>>()
-                        })
-                        .collect::<Vec<_>>()
+                .flat_map(|fpr| store.search_by_fingerprint(&fpr).ok())
+                .flatten()
+                .collect::<Vec<_>>();
+            if certs.is_empty() {
+                let store = if let Some(cert_store) = cert_store {
+                    CertD::with_base_dir(cert_store)?
+                } else {
+                    CertD::new()?
+                };
+                for fingerprint in fingerprints {
+                    eprintln!("https://keys.openpgp.org/pks/lookup?op=get&options=mr&search={fingerprint}");
+                    if let Ok(response) = reqwest::blocking::get(format!("https://keys.openpgp.org/pks/lookup?op=get&options=mr&search={fingerprint}")) {
+                        if let Ok(text) = response.text() {
+                            if let Ok(loaded_certs) = rpgpie::key::Certificate::load(&mut std::io::Cursor::new(text.as_bytes())) {
+                                for cert in loaded_certs {
+                                    let mut w = vec![];
+                                    rpgpie::key::Certificate::save(&vec![cert.clone()], false, &mut w)?;
+                                store.insert_data(&w, false, |old, _new| {
+                                    Ok(openpgp_cert_d::MergeResult::DataRef(old))
+                                })?;
+                                certs.push(cert);
+                                    }
+                                }
+                            }
+                        }
+                }
+            }
+            let valid_sigs = certs
+                .iter()
+                .flat_map(|cert| {
+                    let key: CheckedCertificate = cert.into();
+                    key.valid_signing_capable_component_keys_at(
+                        &std::time::SystemTime::now().into(),
+                    )
+                    .iter()
+                    .filter_map(|signing_key| {
+                        signing_key
+                            .clone()
+                            .verify(sig, &buffer)
+                            .map(|_| (key.clone(), signing_key.clone(), sig.clone()))
+                            .ok()
+                    })
+                    .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
             for (key, signing_key, _sig) in &valid_sigs {

@@ -15,6 +15,8 @@ openpgp-card-rpgp = { git = "https://codeberg.org/heiko/openpgp-card-rpgp" }
 card-backend-pcsc = "0.5.0"
 openpgp-card = "0.4.2"
 openpgp-card-state = "0.1.0"
+reqwest = { version = "0.12.3", features = ["blocking"] }
+openpgp-cert-d = "0.3.2"
 
 [dev-dependencies]
 openpgp-cert-d = "0.3.1"
