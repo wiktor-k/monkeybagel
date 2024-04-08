@@ -133,7 +133,7 @@ pub fn run(
             let fingerprints = fingerprints.iter().map(hex::encode).collect::<Vec<_>>();
             let mut certs = fingerprints
                 .iter()
-                .flat_map(|fpr| store.search_by_fingerprint(&fpr).ok())
+                .flat_map(|fpr| store.search_by_fingerprint(fpr).ok())
                 .flatten()
                 .collect::<Vec<_>>();
             if certs.is_empty() {
