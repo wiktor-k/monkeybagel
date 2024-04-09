@@ -2,15 +2,15 @@ use std::{io::Read, io::Write, path::PathBuf};
 
 use card_backend_pcsc::PcscBackend;
 use clap::Parser;
-use openpgp_card::KeyType;
+use openpgp_card::ocard::KeyType;
 use openpgp_card_rpgp::CardSlot;
 use openpgp_cert_d::CertD;
+use pgp::{ArmorOptions, Deserializable, Signature, SignedSecretKey, StandaloneSignature};
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::packet::{self, SignatureConfig};
 use pgp::types::{KeyTrait, KeyVersion, SecretKeyTrait};
-use pgp::{Deserializable, Signature, SignedSecretKey, StandaloneSignature};
 use rpgpie::key::{checked::CheckedCertificate, component::SignedComponentKeyPub};
-use rpgpie_cert_store::Store;
+use rpgpie_certificate_store::Store;
 
 #[derive(Parser, Debug, Default)]
 pub struct Args {
@@ -167,18 +167,17 @@ pub fn run(
                     key.valid_signing_capable_component_keys_at(
                         &std::time::SystemTime::now().into(),
                     )
-                    .iter()
-                    .filter_map(|signing_key| {
-                        signing_key
-                            .clone()
+                    .into_iter()
+                    .filter_map(|verifier| {
+                        verifier
                             .verify(sig, &buffer)
-                            .map(|_| (key.clone(), signing_key.clone(), sig.clone()))
+                            .map(|_| (key.clone(), verifier, sig.clone()))
                             .ok()
                     })
                     .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
-            for (key, signing_key, _sig) in &valid_sigs {
+            for (key, verifier, _sig) in &valid_sigs {
                 if let Some(user_id) = key.primary_user_id() {
                     writeln!(stderr, "Signed by: {}", user_id.id.id())?;
                 }
@@ -194,7 +193,7 @@ pub fn run(
                 writeln!(
                     stderr,
                     "Signing key: {}",
-                    hex::encode(signing_key.fingerprint())
+                    hex::encode(verifier.as_componentkey().fingerprint())
                 )?;
             }
             //eprintln!("VLD: {valid_sigs:?}");
@@ -229,13 +228,13 @@ pub fn run(
                     let card = card?;
                     let mut card = openpgp_card::Card::new(card)?;
                     let mut tx = card.transaction()?;
-                    let ard = tx.application_related_data()?;
+                    let ard = tx.card().application_related_data()?;
                     let fprs = ard.fingerprints()?;
                     if let Some(fpr) = fprs.signature() {
                         if fpr.as_bytes() == signing_key {
                             let ident = ard.application_id()?.ident();
                             if let Ok(Some(pin)) = openpgp_card_state::get_pin(&ident) {
-                                if tx.verify_pw1_sign(pin.as_bytes()).is_err() {
+                                if tx.card().verify_pw1_sign(pin.as_bytes()).is_err() {
                                     // We drop the PIN from the state backend, to avoid exhausting
                                     // the retry counter and locking up the User PIN.
                                     let res = openpgp_card_state::drop_pin(&ident);
@@ -256,7 +255,9 @@ pub fn run(
                                 );
                             }
 
-                            let cs = CardSlot::init_from_card(tx, KeyType::Signing)?;
+                            let cs = CardSlot::init_from_card(&mut tx, KeyType::Signing, &|| {
+                                eprintln!("touch confirmation required")
+                            })?;
 
                             signature = Some(complete_signing(cs, stdin)?);
                             break;
@@ -264,12 +265,16 @@ pub fn run(
                     }
                 }
 
-                signature.expect("No cards attached provide signing for selected key.")
+                signature.unwrap_or_else(|| {
+                    panic!(
+                        "No cards attached provide signing for selected key {:?}.",
+                        key
+                    )
+                })
             };
             match armor {
-                Armor::Armor => {
-                    StandaloneSignature { signature }.to_armored_writer(&mut stdout, None)?
-                }
+                Armor::Armor => StandaloneSignature { signature }
+                    .to_armored_writer(&mut stdout, ArmorOptions::default())?,
                 Armor::NoArmor => pgp::packet::write_packet(&mut stdout, &signature)?,
             }
             true

@@ -8,12 +8,12 @@ edition = "2021"
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
 hex = "0.4.3"
-pgp = "0.12.0-alpha.1"
-rpgpie = { version = "0.0.3" }
-rpgpie-cert-store = { version = "0.0.1", package = "rpgpie-certificate-store" }
-openpgp-card-rpgp = { git = "https://codeberg.org/heiko/openpgp-card-rpgp" }
+pgp = "0.12.0-alpha.2"
+rpgpie = { version = "0.0.5" }
+rpgpie-certificate-store = "0.0.2"
+openpgp-card-rpgp = "0.0.1"
 card-backend-pcsc = "0.5.0"
-openpgp-card = "0.4.2"
+openpgp-card = "0.5.0-alpha.1"
 openpgp-card-state = "0.1.0"
 reqwest = { version = "0.12.3", features = ["blocking"] }
 openpgp-cert-d = "0.3.2"
