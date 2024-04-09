@@ -105,6 +105,14 @@ impl Mode {
     }
 }
 
+fn match_id(card: &[u8], git: &[u8]) -> bool {
+    match (card.len(), git.len()) {
+        (20, 20) => card == git,
+        (20, 8) => &card[12..] == git, // match as v4 key id
+        _ => false,
+    }
+}
+
 pub fn run(
     args: Args,
     mut stdin: impl Read,
@@ -231,7 +239,7 @@ pub fn run(
                     let ard = tx.card().application_related_data()?;
                     let fprs = ard.fingerprints()?;
                     if let Some(fpr) = fprs.signature() {
-                        if fpr.as_bytes() == signing_key {
+                        if match_id(fpr.as_bytes(), &signing_key) {
                             let ident = ard.application_id()?.ident();
                             if let Ok(Some(pin)) = openpgp_card_state::get_pin(&ident) {
                                 if tx.card().verify_pw1_sign(pin.as_bytes()).is_err() {
