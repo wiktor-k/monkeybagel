@@ -317,7 +317,7 @@ fn complete_signing(
         vec![],
     );
 
-    let mut hasher = HashAlgorithm::SHA2_256.new_hasher()?;
+    let mut hasher = signature.hash_alg.new_hasher()?;
 
     signature.hash_data_to_sign(&mut *hasher, stdin)?;
     let len = signature.hash_signature_data(&mut *hasher)?;
