@@ -222,7 +222,6 @@ pub fn run(
                         .map(hex::encode)
                         .fold(String::new(), |a, b| a + " " + &b)
                 )?;
-            } else {
             }
             Ok(())
         }
