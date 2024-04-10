@@ -2,13 +2,14 @@ use std::{io::Read, io::Write, path::PathBuf};
 
 use card_backend_pcsc::PcscBackend;
 use clap::Parser;
+use hex::ToHex;
 use openpgp_card::ocard::KeyType;
 use openpgp_card_rpgp::CardSlot;
 use openpgp_cert_d::CertD;
-use pgp::{ArmorOptions, Deserializable, Signature, SignedSecretKey, StandaloneSignature};
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::packet::{self, SignatureConfig};
 use pgp::types::{KeyTrait, KeyVersion, SecretKeyTrait};
+use pgp::{ArmorOptions, Deserializable, Signature, SignedSecretKey, StandaloneSignature};
 use rpgpie::key::{checked::CheckedCertificate, component::SignedComponentKeyPub};
 use rpgpie_certificate_store::Store;
 
@@ -89,22 +90,6 @@ impl TryFrom<Args> for Mode {
     }
 }
 
-impl Mode {
-    fn write_success_trailer(
-        &self,
-        mut stdout: impl Write,
-        mut stderr: impl Write,
-    ) -> std::io::Result<()> {
-        match *self {
-            // https://github.com/git/git/blob/11c821f2f2a31e70fb5cc449f9a29401c333aad2/gpg-interface.c#L371
-            Mode::Verify { .. } => writeln!(stdout, "\n[GNUPG:] GOODSIG ")?,
-            // https://github.com/git/git/blob/11c821f2f2a31e70fb5cc449f9a29401c333aad2/gpg-interface.c#L994
-            Mode::Sign(_, _) => writeln!(stderr, "\n[GNUPG:] SIG_CREATED ")?,
-        }
-        Ok(())
-    }
-}
-
 fn match_id(card: &[u8], git: &[u8]) -> bool {
     match (card.len(), git.len()) {
         (20, 20) => card == git,
@@ -121,7 +106,7 @@ pub fn run(
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mode: Mode = args.try_into()?;
 
-    if match &mode {
+    match &mode {
         Mode::Verify {
             signature,
             cert_store,
@@ -188,7 +173,28 @@ pub fn run(
             for (key, verifier, _sig) in &valid_sigs {
                 if let Some(user_id) = key.primary_user_id() {
                     writeln!(stderr, "Signed by: {}", user_id.id.id())?;
+                    writeln!(
+                        stdout,
+                        "\n[GNUPG:] GOODSIG {:X} {}",
+                        verifier.as_componentkey().key_id(),
+                        user_id.id.id()
+                    )?;
+                } else {
+                    writeln!(
+                        stdout,
+                        "\n[GNUPG:] GOODSIG {:X}",
+                        verifier.as_componentkey().key_id(),
+                    )?;
                 }
+                // https://github.com/git/git/blob/11c821f2f2a31e70fb5cc449f9a29401c333aad2/gpg-interface.c#L371
+                write!(
+                    stdout,
+                    "[GNUPG:] VALIDSIG {}",
+                    verifier
+                        .as_componentkey()
+                        .fingerprint()
+                        .encode_hex_upper::<String>()
+                )?;
                 writeln!(
                     stderr,
                     "Certificate: {}",
@@ -216,10 +222,9 @@ pub fn run(
                         .map(hex::encode)
                         .fold(String::new(), |a, b| a + " " + &b)
                 )?;
-                false
             } else {
-                true
             }
+            Ok(())
         }
         Mode::Sign(key, armor) => {
             let signature = if let Some(file_name) = key.strip_prefix("file::") {
@@ -285,13 +290,12 @@ pub fn run(
                     .to_armored_writer(&mut stdout, ArmorOptions::default())?,
                 Armor::NoArmor => pgp::packet::write_packet(&mut stdout, &signature)?,
             }
-            true
+
+            // https://github.com/git/git/blob/11c821f2f2a31e70fb5cc449f9a29401c333aad2/gpg-interface.c#L994
+            writeln!(stderr, "\n[GNUPG:] SIG_CREATED ")?;
+
+            Ok(())
         }
-    } {
-        mode.write_success_trailer(stdout, stderr)?;
-        Ok(())
-    } else {
-        Err(std::io::Error::other("processing error").into())
     }
 }
 
